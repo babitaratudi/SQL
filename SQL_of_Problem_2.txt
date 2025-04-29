@@ -1,0 +1,73 @@
+1. Total average monthly revenue by industry. Interpret the insight from the output.
+
+SELECT
+  u.industry,
+  ROUND(SUM(o.invoice) / COUNT(DISTINCT EXTRACT(YEAR FROM TO_DATE(o.purchase_date, 'MM/DD/YY')) * 100 + EXTRACT(MONTH FROM TO_DATE(o.purchase_date, 'MM/DD/YY'))), 2) AS total_avg_monthly_revenue
+FROM
+  OrderData o
+JOIN
+  UserLevelData u ON o.user_id = u.user_id
+GROUP BY
+  u.industry
+ORDER BY
+  total_avg_monthly_revenue DESC;
+  
+2. Top 2 users by industry based on overall revenue 
+
+WITH user_revenue AS (
+  SELECT
+    u.industry,
+    o.user_id,
+    SUM(o.invoice) AS total_revenue,
+    DENSE_RANK() OVER (PARTITION BY u.industry ORDER BY SUM(o.invoice) DESC) AS rank
+  FROM
+    OrderData o
+  JOIN
+    UserLevelData u ON o.user_id = u.user_id
+  GROUP BY
+    u.industry, o.user_id
+)
+
+SELECT
+  industry,
+  user_id,
+  total_revenue
+FROM
+  user_revenue
+WHERE
+  rank <= 2
+ORDER BY
+  industry,
+  total_revenue DESC;
+  
+3. For each user, get the current month, previous month, and previous -1 month revenue and order count.
+
+WITH purchase_data AS (
+  SELECT 
+    user_id,
+    invoice,
+    TO_DATE(purchase_date, 'MM/DD/YY') AS purchase_date,
+    EXTRACT(YEAR FROM TO_DATE(purchase_date, 'MM/DD/YY')) * 100 + 
+    EXTRACT(MONTH FROM TO_DATE(purchase_date, 'MM/DD/YY')) AS purchase_month_key
+  FROM OrderData o
+),
+month_keys AS (
+  SELECT 
+    EXTRACT(YEAR FROM CURRENT_DATE) * 100 + EXTRACT(MONTH FROM CURRENT_DATE) AS current_month_key,
+    EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') * 100 + EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AS prev_month_key,
+    EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '2 month') * 100 + EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '2 month') AS prev_1_month_key
+)
+SELECT 
+  p.user_id,
+  SUM(CASE WHEN p.purchase_month_key = m.current_month_key THEN p.invoice ELSE 0 END) AS current_month_revenue,
+  COUNT(CASE WHEN p.purchase_month_key = m.current_month_key THEN 1 ELSE NULL END) AS current_month_orders,
+  SUM(CASE WHEN p.purchase_month_key = m.prev_month_key THEN p.invoice ELSE 0 END) AS prev_month_revenue,
+  COUNT(CASE WHEN p.purchase_month_key = m.prev_month_key THEN 1 ELSE NULL END) AS prev_month_orders,
+  SUM(CASE WHEN p.purchase_month_key = m.prev_1_month_key THEN p.invoice ELSE 0 END) AS prev_1_month_revenue,
+  COUNT(CASE WHEN p.purchase_month_key = m.prev_1_month_key THEN 1 ELSE NULL END) AS prev_1_month_orders
+FROM purchase_data p
+JOIN month_keys m
+GROUP BY p.user_id
+ORDER BY p.user_id;
+
+

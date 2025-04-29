@@ -1,0 +1,47 @@
+WITH original_orders AS (
+  SELECT 
+    Date,
+    OrderId,
+    UserId,
+    Category,
+    Value,
+    Qty,
+    1 AS sort_order
+  FROM orders
+  WHERE Category != 'Bed + Mattress'
+),
+split_bed AS (
+  SELECT 
+    Date,
+    OrderId,
+    UserId,
+    'Bed' AS Category,
+    CAST(Value * 0.80 AS INT) AS Value,
+    Qty,
+    2 AS sort_order
+  FROM orders
+  WHERE Category = 'Bed + Mattress'
+),
+split_mattress AS (
+  SELECT 
+    Date,
+    OrderId,
+    UserId,
+    'Mattress' AS Category,
+    CAST(Value * 0.20 AS INT) AS Value,
+    Qty,
+    3 AS sort_order
+  FROM orders
+  WHERE Category = 'Bed + Mattress'
+)
+
+SELECT 
+  Date, OrderId, UserId, Category, Value, Qty
+FROM (
+  SELECT * FROM original_orders
+  UNION ALL
+  SELECT * FROM split_bed
+  UNION ALL
+  SELECT * FROM split_mattress
+) AS combined
+ORDER BY sort_order;
